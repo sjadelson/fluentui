@@ -110,7 +110,6 @@ export interface ButtonState extends ButtonProps {
  */
 export type ButtonTokens = ColorTokens &
   FontTokens & {
-    /* sizing */
     paddingLeft?: string;
     paddingRight?: string;
     paddingTop?: string;
@@ -131,9 +130,12 @@ export type ButtonTokens = ColorTokens &
     boxShadow?: string;
     width?: string;
 
+    forcedColorAdjust?: string;
+
     transform?: string;
     transition?: string;
 
+    /* sizing */
     size?: {
       smallest?: string;
       smaller?: string;
@@ -154,9 +156,11 @@ export type ButtonTokens = ColorTokens &
  * {@docCategory Button}
  */
 export type ButtonVariants<TTokens = ButtonTokens> = {
-  base?: TTokens;
-  primary?: TTokens;
-  iconOnly?: TTokens;
-  circular?: TTokens;
+  root?: TTokens;
   block?: TTokens;
+  circular?: TTokens;
+  iconOnly?: TTokens;
+  ghost?: TTokens;
+  primary?: TTokens;
+  transparent?: TTokens;
 };
