@@ -14,11 +14,9 @@ import {
   EditableItem,
   DefaultEditingItem,
   EditingItemInnerFloatingPickerProps,
-  ItemWithContextMenu,
 } from '@fluentui/react-experiments/lib/SelectedItemsList';
 import { IInputProps } from '@fluentui/react';
-import { SuggestionsStore } from '@fluentui/react-experiments/lib/FloatingSuggestions';
-import { FloatingPeopleSuggestions } from '@fluentui/react-experiments/lib/FloatingPeopleSuggestions';
+import { FloatingPeopleSuggestions } from '@fluentui/react-experiments/lib/FloatingPeopleSuggestionsComposite';
 
 const _suggestions = [
   {
@@ -72,63 +70,34 @@ export const UnifiedPeoplePickerWithEditExample = (): JSX.Element => {
 
   const ref = React.useRef<any>();
 
-  // Used to resolve suggestions on the editableItem
-  const model = new ExampleSuggestionsModel<IPersonaProps>(people);
-  const suggestionsStore = new SuggestionsStore<IPersonaProps>();
+  const [editingSuggestions, setEditingSuggestions] = React.useState<IFloatingSuggestionItemProps<IPersonaProps>[]>([
+    ..._suggestions,
+  ]);
+
+  const _onInputStringChanged = (value: string) => {
+    const allPeople = people;
+    const suggestions = allPeople.filter((item: IPersonaProps) => _startsWith(item.text || '', value));
+    const suggestionList = suggestions.map(item => {
+      return { item: item, isSelected: false, key: item.key } as IFloatingSuggestionItem<IPersonaProps>;
+    });
+    // We want to show top 5 results
+    setEditingSuggestions(suggestionList.splice(0, 5));
+  };
 
   /**
    * Build a custom selected item capable of being edited when the item is right clicked
    */
   const SelectedItem = EditableItem({
+    itemComponent: TriggerOnContextMenu(SelectedPersona),
     editingItemComponent: DefaultEditingItem({
       getEditingItemText: persona => persona.text || '',
       onRenderFloatingPicker: (props: EditingItemInnerFloatingPickerProps<IPersonaProps>) => (
-        <FloatingPeopleSuggestions
-          {...props}
-          suggestionsStore={suggestionsStore}
-          onResolveSuggestions={model.resolveSuggestions}
-        />
+        <FloatingPeopleSuggestions {...props} />
       ),
-    }),
-    itemComponent: ItemWithContextMenu<IPersona>({
-      menuItems: (item, onTrigger) => [
-        {
-          key: 'copy',
-          text: 'copy',
-          onClick: () => {
-            _copyToClipboardWrapper(item);
-          },
-        },
-        {
-          key: 'edit',
-          text: 'Edit',
-          onClick: () => onTrigger && onTrigger(),
-        },
-      ],
-      itemComponent: TriggerOnContextMenu(SelectedPersona),
+      onInputStringChanged: _onInputStringChanged,
+      suggestions: editingSuggestions,
     }),
   });
-
-  const _copyToClipboardWrapper = (item: IPersona) => {
-    const selectedItems = ref.current?.getSelectedItems();
-    if (selectedItems && selectedItems.length > 1) {
-      _copyToClipboard(_getItemsCopyText(selectedItems));
-    } else {
-      _copyToClipboard(_getItemsCopyText([item]));
-    }
-  };
-
-  const _copyToClipboard = (copyString: string): void => {
-    navigator.clipboard.writeText(copyString).then(
-      () => {
-        /* clipboard successfully set */
-      },
-      () => {
-        /* clipboard write failed */
-        throw new Error();
-      },
-    );
-  };
 
   const _onSuggestionSelected = (
     ev: React.MouseEvent<HTMLElement, MouseEvent>,
@@ -190,6 +159,29 @@ export const UnifiedPeoplePickerWithEditExample = (): JSX.Element => {
     }
 
     setPeopleSelectedItems(prevPeopleSelectedItems => [...prevPeopleSelectedItems, ...newList]);
+  };
+
+  const _dropItemsAt = (insertIndex: number, newItems: IPersonaProps[], indicesToRemove: number[]): void => {
+    // Insert those items into the current list
+    if (insertIndex > -1) {
+      const currentItems: IPersonaProps[] = [...peopleSelectedItems];
+      const updatedItems: IPersonaProps[] = [];
+
+      for (let i = 0; i < currentItems.length; i++) {
+        const item = currentItems[i];
+        // If this is the insert before index, insert the dragged items, then the current item
+        if (i === insertIndex) {
+          newItems.forEach(draggedItem => {
+            updatedItems.push(draggedItem);
+          });
+          updatedItems.push(item);
+        } else if (!indicesToRemove.includes(i)) {
+          // only insert items into the new list that are not being dragged
+          updatedItems.push(item);
+        }
+      }
+      setPeopleSelectedItems(updatedItems);
+    }
   };
 
   const _onItemsRemoved = (itemsToRemove: IPersonaProps[]): void => {
@@ -256,6 +248,7 @@ export const UnifiedPeoplePickerWithEditExample = (): JSX.Element => {
     removeButtonAriaLabel: 'Remove',
     onItemsRemoved: _onItemsRemoved,
     getItemCopyText: _getItemsCopyText,
+    dropItemsAt: _dropItemsAt,
     onRenderItem: SelectedItem,
     replaceItem: _replaceItem,
   } as ISelectedPeopleListProps<IPersonaProps>;
@@ -275,65 +268,7 @@ export const UnifiedPeoplePickerWithEditExample = (): JSX.Element => {
         onInputChange={_onInputChange}
         // eslint-disable-next-line react/jsx-no-bind
         onPaste={_onPaste}
-        defaultDragDropEnabled={false}
       />
     </>
   );
 };
-
-type IBaseExampleType = {
-  text?: string;
-  name?: string;
-};
-
-class ExampleSuggestionsModel<T extends IBaseExampleType> {
-  private suggestionsData: T[];
-
-  public constructor(data: T[]) {
-    this.suggestionsData = [...data];
-  }
-
-  public resolveSuggestions = (filterText: string, currentItems?: T[]): Promise<T[]> => {
-    let filteredItems: T[] = [];
-    if (filterText) {
-      filteredItems = this._filterItemsByText(filterText);
-      filteredItems = this._removeDuplicates(filteredItems, currentItems || []);
-    }
-
-    return this._convertResultsToPromise(filteredItems);
-  };
-
-  public removeSuggestion(item: T) {
-    const index = this.suggestionsData.indexOf(item);
-    console.log('removing', item, 'at', index);
-    if (index !== -1) {
-      this.suggestionsData.splice(index, 1);
-    }
-  }
-
-  private _filterItemsByText(filterText: string): T[] {
-    return this.suggestionsData.filter((item: T) => {
-      const itemText = item.text || item.name;
-      return itemText ? this._doesTextStartWith(itemText, filterText) : false;
-    });
-  }
-
-  private _doesTextStartWith(text: string, filterText: string): boolean {
-    return text.toLowerCase().indexOf(filterText.toLowerCase()) === 0;
-  }
-
-  private _removeDuplicates(items: T[], possibleDupes: T[]): T[] {
-    return items.filter((item: T) => !this._listContainsItem(item, possibleDupes));
-  }
-
-  private _listContainsItem(item: T, Items: T[]): boolean {
-    if (!Items || !Items.length || Items.length === 0) {
-      return false;
-    }
-    return Items.filter((i: T) => (i.text || i.name) === (item.text || item.name)).length > 0;
-  }
-
-  private _convertResultsToPromise(results: T[]): Promise<T[]> {
-    return new Promise<T[]>(resolve => setTimeout(() => resolve(results), 150));
-  }
-}

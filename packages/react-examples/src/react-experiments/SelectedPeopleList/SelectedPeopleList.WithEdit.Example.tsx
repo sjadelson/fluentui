@@ -2,7 +2,7 @@ import * as React from 'react';
 
 import { PrimaryButton } from '@fluentui/react/lib/compat/Button';
 import { IPersonaProps, IPersona } from '@fluentui/react/lib/Persona';
-import { people } from '@fluentui/example-data';
+import { mru, people } from '@fluentui/example-data';
 import {
   SelectedPeopleList,
   SelectedPersona,
@@ -11,136 +11,138 @@ import {
   DefaultEditingItem,
   EditingItemInnerFloatingPickerProps,
 } from '@fluentui/react-experiments/lib/SelectedItemsList';
-import { FloatingPeopleSuggestions } from '@fluentui/react-experiments/lib/FloatingPeopleSuggestions';
-import { SuggestionsStore } from '@fluentui/react-experiments/lib/FloatingSuggestions';
+import {
+  FloatingPeopleSuggestions,
+  IFloatingSuggestionItem,
+  IFloatingSuggestionItemProps,
+} from '@fluentui/react-experiments/lib/FloatingPeopleSuggestionsComposite';
 
-export interface IPeopleSelectedItemsListExampleState {
-  currentSelectedItems: IPersonaProps[];
-}
+const _suggestions = [
+  {
+    key: '1',
+    id: '1',
+    displayText: 'Suggestion 1',
+    item: mru[0],
+    isSelected: true,
+    showRemoveButton: true,
+  },
+  {
+    key: '2',
+    id: '2',
+    displayText: 'Suggestion 2',
+    item: mru[1],
+    isSelected: false,
+    showRemoveButton: true,
+  },
+  {
+    key: '3',
+    id: '3',
+    displayText: 'Suggestion 3',
+    item: mru[2],
+    isSelected: false,
+    showRemoveButton: true,
+  },
+  {
+    key: '4',
+    id: '4',
+    displayText: 'Suggestion 4',
+    item: mru[3],
+    isSelected: false,
+    showRemoveButton: true,
+  },
+  {
+    key: '5',
+    id: '5',
+    displayText: 'Suggestion 5',
+    item: mru[4],
+    isSelected: false,
+    showRemoveButton: true,
+  },
+] as IFloatingSuggestionItem<IPersonaProps>[];
 
-export class SelectedPeopleListWithEditExample extends React.Component<{}, IPeopleSelectedItemsListExampleState> {
-  // Used to resolve suggestions on the editableItem
-  private model = new ExampleSuggestionsModel<IPersonaProps>(people);
-  private suggestionsStore = new SuggestionsStore<IPersonaProps>();
+export const SelectedPeopleListWithEditExample = (): JSX.Element => {
+  const [currentSelectedItems, setCurrentSelectedItems] = React.useState<IPersonaProps[]>([people[40]]);
+  const [editingSuggestions, setEditingSuggestions] = React.useState<IFloatingSuggestionItemProps<IPersonaProps>[]>([
+    ..._suggestions,
+  ]);
+
+  const _startsWith = (text: string, filterText: string): boolean => {
+    return text.toLowerCase().indexOf(filterText.toLowerCase()) === 0;
+  };
+
+  const _onInputStringChanged = (value: string) => {
+    const allPeople = people;
+    const suggestions = allPeople.filter((item: IPersonaProps) => _startsWith(item.text || '', value));
+    const suggestionList = suggestions.map(item => {
+      return { item: item, isSelected: false, key: item.key } as IFloatingSuggestionItem<IPersonaProps>;
+    });
+    // We want to show top 5 results
+    setEditingSuggestions(suggestionList.splice(0, 5));
+  };
 
   /**
    * Build a custom selected item capable of being edited when the item is right clicked
    */
-  private SelectedItem = EditableItem({
+  const SelectedItem = EditableItem({
     itemComponent: TriggerOnContextMenu(SelectedPersona),
     editingItemComponent: DefaultEditingItem({
       getEditingItemText: persona => persona.text || '',
       onRenderFloatingPicker: (props: EditingItemInnerFloatingPickerProps<IPersonaProps>) => (
-        <FloatingPeopleSuggestions
-          {...props}
-          suggestionsStore={this.suggestionsStore}
-          onResolveSuggestions={this.model.resolveSuggestions}
-        />
+        <FloatingPeopleSuggestions {...props} />
       ),
+      onRemoveItem: item => _onItemsRemoved([item]),
+      onInputStringChanged: value => _onInputStringChanged(value),
+      suggestions: editingSuggestions,
     }),
   });
 
-  constructor(props: {}) {
-    super(props);
-
-    this.state = {
-      currentSelectedItems: [people[40]],
-    };
-  }
-
-  public render(): JSX.Element {
-    return (
-      <div className={'ms-BasePicker-text'}>
-        Right click any persona to edit it
-        <br />
-        <PrimaryButton text="Add another item" onClick={this._onAddItemButtonClicked} />
-        {this._renderExtendedPicker()}
-      </div>
-    );
-  }
-
-  private _renderExtendedPicker(): JSX.Element {
+  const _renderExtendedPicker = (): JSX.Element => {
     return (
       <div>
         <SelectedPeopleList
           key={'normal'}
           removeButtonAriaLabel={'Remove'}
-          selectedItems={[...this.state.currentSelectedItems]}
-          onRenderItem={this.SelectedItem}
-          onItemsRemoved={this._onItemsRemoved}
+          selectedItems={[...currentSelectedItems]}
+          onRenderItem={SelectedItem}
+          onItemsRemoved={_onItemsRemoved}
+          replaceItem={_replaceItem}
         />
       </div>
     );
-  }
-
-  private _onAddItemButtonClicked = (): void => {
-    const randomPerson = people[Math.floor(Math.random() * (people.length - 1))];
-    this.setState({ currentSelectedItems: [...this.state.currentSelectedItems, randomPerson] });
   };
 
-  private _onItemsRemoved = (items: IPersona[]): void => {
-    const currentSelectedItemsCopy = [...this.state.currentSelectedItems];
+  const _onAddItemButtonClicked = (): void => {
+    const randomPerson = people[Math.floor(Math.random() * (people.length - 1))];
+    setCurrentSelectedItems([...currentSelectedItems, randomPerson]);
+  };
+
+  const _onItemsRemoved = (items: IPersona[]): void => {
+    const currentSelectedItemsCopy = [...currentSelectedItems];
     items.forEach(item => {
       const indexToRemove = currentSelectedItemsCopy.indexOf(item);
       currentSelectedItemsCopy.splice(indexToRemove, 1);
-      this.setState({ currentSelectedItems: [...currentSelectedItemsCopy] });
+      setCurrentSelectedItems([...currentSelectedItemsCopy]);
     });
   };
-}
 
-type IBaseExampleType = {
-  text?: string;
-  name?: string;
+  const _replaceItem = (newItem: IPersonaProps | IPersona[], index: number): void => {
+    const newItemsArray = !Array.isArray(newItem) ? [newItem] : newItem;
+
+    if (index >= 0) {
+      const newItems: IPersonaProps[] = [...currentSelectedItems];
+      newItems.splice(index, 1, ...newItemsArray);
+      setCurrentSelectedItems(newItems);
+    }
+  };
+
+  return (
+    <>
+      <div className={'ms-BasePicker-text'}>
+        Right click any persona to edit it
+        <br />
+        <PrimaryButton text="Add another item" onClick={_onAddItemButtonClicked} />
+        {_renderExtendedPicker()}
+      </div>
+    </>
+  );
 };
-
-class ExampleSuggestionsModel<T extends IBaseExampleType> {
-  private suggestionsData: T[];
-
-  public constructor(data: T[]) {
-    this.suggestionsData = [...data];
-  }
-
-  public resolveSuggestions = (filterText: string, currentItems?: T[]): Promise<T[]> => {
-    let filteredItems: T[] = [];
-    if (filterText) {
-      filteredItems = this._filterItemsByText(filterText);
-      filteredItems = this._removeDuplicates(filteredItems, currentItems || []);
-    }
-
-    return this._convertResultsToPromise(filteredItems);
-  };
-
-  public removeSuggestion(item: T) {
-    const index = this.suggestionsData.indexOf(item);
-    console.log('removing', item, 'at', index);
-    if (index !== -1) {
-      this.suggestionsData.splice(index, 1);
-    }
-  }
-
-  private _filterItemsByText(filterText: string): T[] {
-    return this.suggestionsData.filter((item: T) => {
-      const itemText = item.text || item.name;
-      return itemText ? this._doesTextStartWith(itemText, filterText) : false;
-    });
-  }
-
-  private _doesTextStartWith(text: string, filterText: string): boolean {
-    return text.toLowerCase().indexOf(filterText.toLowerCase()) === 0;
-  }
-
-  private _removeDuplicates(items: T[], possibleDupes: T[]): T[] {
-    return items.filter((item: T) => !this._listContainsItem(item, possibleDupes));
-  }
-
-  private _listContainsItem(item: T, Items: T[]): boolean {
-    if (!Items || !Items.length || Items.length === 0) {
-      return false;
-    }
-    return Items.filter((i: T) => (i.text || i.name) === (item.text || item.name)).length > 0;
-  }
-
-  private _convertResultsToPromise(results: T[]): Promise<T[]> {
-    return new Promise<T[]>(resolve => setTimeout(() => resolve(results), 150));
-  }
-}
